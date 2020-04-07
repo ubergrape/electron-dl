@@ -1,5 +1,5 @@
 {
-	"name": "electron-dl",
+	"name": "grape-electron-dl",
 	"version": "3.0.0",
 	"description": "Simplified file downloads for your Electron app",
 	"license": "MIT",
@@ -36,7 +36,7 @@
 		"@types/node": "^13.1.4",
 		"ava": "^2.4.0",
 		"cp-file": "^7.0.0",
-		"electron": "^7.1.7",
+		"electron": "^8.2.1",
 		"minimist": "^1.2.0",
 		"node-static": "^0.7.11",
 		"pify": "^4.0.1",

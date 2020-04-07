@@ -1,6 +1,6 @@
 'use strict';
 const path = require('path');
-const {app, BrowserWindow, shell, dialog} = require('electron');
+const {app, BrowserWindow, shell, dialog, remote} = require('electron');
 const unusedFilename = require('unused-filename');
 const pupa = require('pupa');
 const extName = require('ext-name');
@@ -142,13 +142,33 @@ module.exports.download = (window_, url, options) => new Promise((resolve, rejec
 		unregisterWhenDone: true
 	};
 
-	registerListener(window_.webContents.session, options, (error, item) => {
-		if (error) {
-			reject(error);
-		} else {
-			resolve(item);
-		}
-	});
+	if (window_.webContents) {
+		registerListener(window_.webContents.session, options, (error, item) => {
+			if (error) {
+				reject(error);
+			} else {
+				resolve(item);
+			}
+		});
 
-	window_.webContents.downloadURL(url);
+		window_.webContents.downloadURL(url);
+		return;
+	}
+
+	if (window_.tagName === 'WEBVIEW') {
+		if (!options.saveAs) {
+			console.warn(new Error('Use saveImageAs option to save images from webview for better UX'));
+		}
+
+		const session = remote.session.fromPartition(window_.getAttribute('partition'));
+
+		if (session) {
+			resolve();
+			session.downloadURL(url);
+		} else {
+			reject(new Error('Can\'t find partition attribute for webview. More details: https://www.electronjs.org/docs/api/webview-tag#partition'));
+		}
+	} else {
+		reject(new Error('Can\'t find webContents for selected window'));
+	}
 });
