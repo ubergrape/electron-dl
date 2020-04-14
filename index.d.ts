@@ -1,10 +1,16 @@
-import {BrowserWindow, DownloadItem} from 'electron';
+import {BrowserWindow, session, webContents, DownloadItem} from 'electron';
 
 declare namespace electronDl {
 	interface Progress {
 		percent: number;
 		transferredBytes: number;
 		totalBytes: number;
+	}
+
+	interface Webview {
+		event: Event,
+		item: DownloadItem,
+		webContents: webContents
 	}
 
 	interface Options {
@@ -75,6 +81,11 @@ declare namespace electronDl {
 		@default true
 		*/
 		readonly showBadge?: boolean;
+
+		/**
+		Optional parameters for webview.
+		*/
+		readonly webview?: Webview;
 	}
 }
 
@@ -101,7 +112,7 @@ declare const electronDl: {
 	/**
 	This can be useful if you need download functionality in a reusable module.
 
-	@param window - Window to register the behavior on.
+	@param session - Window to register the behavior on.
 	@param url - URL to download.
 	@returns A promise for the downloaded file.
 
@@ -121,6 +132,56 @@ declare const electronDl: {
 		url: string,
 		options?: electronDl.Options
 	): Promise<DownloadItem>;
+
+	/**
+	This can be useful if you are using webview and want to handle will-download event listener in main process.
+
+	@param session - Session to register the behavior on.
+
+	@example
+	```
+	import {ipcMain, session} from 'electron';
+	import {registerListener} 'electron-dl';
+
+	const mainWindow = new BrowserWindow();
+
+	ipcMain.on('electron-dl:download', (event, { options, url, partition }) => {
+		const webviewSession = session.fromPartition(partition)
+
+		webviewSession.downloadURL(url)
+
+		const listener = (e, item) => {
+			registerListener(
+				webviewSession,
+				{
+					...options,
+					webview: {
+						event: e,
+						item,
+						webContents: mainWindow.webContents,
+					},
+				},
+				(error, i) => {
+					if (options.unregisterWhenDone) {
+						webviewSession.removeListener('will-download', listener)
+					}
+					event.reply('electron-context-menu:saved', { error, item: i })
+				},
+			)
+		}
+
+		webviewSession.on('will-download', listener)
+
+		event.reply('receivedDownloadOptions')
+	})
+	```
+	*/
+
+	registerListener(
+		session: session,
+		options?: electronDl.Options,
+		callback?: (error: typeof Error, item: DownloadItem) => void
+	);
 };
 
 export = electronDl;

@@ -1,6 +1,6 @@
 'use strict';
 const path = require('path');
-const {app, BrowserWindow, shell, dialog, remote} = require('electron');
+const {app, BrowserWindow, shell, dialog, remote, ipcRenderer} = require('electron');
 const unusedFilename = require('unused-filename');
 const pupa = require('pupa');
 const extName = require('ext-name');
@@ -15,7 +15,7 @@ const getFilenameFromMime = (name, mime) => {
 	return `${name}.${extensions[0].ext}`;
 };
 
-function registerListener(session, options, callback = () => {}) {
+const registerListener = (session, options, callback = () => {}) => {
 	const downloadItems = new Set();
 	let receivedBytes = 0;
 	let completedBytes = 0;
@@ -101,7 +101,7 @@ function registerListener(session, options, callback = () => {}) {
 				totalBytes = 0;
 			}
 
-			if (options.unregisterWhenDone) {
+			if (options.unregisterWhenDone && !options.webview) {
 				session.removeListener('will-download', listener);
 			}
 
@@ -127,14 +127,22 @@ function registerListener(session, options, callback = () => {}) {
 		});
 	};
 
+	if (options.webview) {
+		const {event, item, webContents} = options.webview;
+		listener(event, item, webContents);
+		return;
+	}
+
 	session.on('will-download', listener);
-}
+};
 
 module.exports = (options = {}) => {
 	app.on('session-created', session => {
 		registerListener(session, options);
 	});
 };
+
+module.exports.registerListener = registerListener;
 
 module.exports.download = (window_, url, options) => new Promise((resolve, reject) => {
 	options = {
@@ -155,16 +163,18 @@ module.exports.download = (window_, url, options) => new Promise((resolve, rejec
 		return;
 	}
 
-	if (window_.tagName === 'WEBVIEW') {
-		if (!options.saveAs) {
-			console.warn(new Error('Use saveImageAs option to save images from webview for better UX'));
-		}
+	if (window_.localName === 'webview') {
+		const partition = window_.getAttribute('partition');
 
-		const session = remote.session.fromPartition(window_.getAttribute('partition'));
-
-		if (session) {
-			resolve();
-			session.downloadURL(url);
+		if (remote.session.fromPartition(partition)) {
+			ipcRenderer.send('electron-dl:download', {options, url, partition});
+			ipcRenderer.on('electron-dl:saved', (event, {error, item}) => {
+				if (error) {
+					reject(error);
+				} else {
+					resolve(item);
+				}
+			});
 		} else {
 			reject(new Error('Can\'t find partition attribute for webview. More details: https://www.electronjs.org/docs/api/webview-tag#partition'));
 		}
